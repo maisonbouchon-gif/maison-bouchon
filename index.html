@@ -64,6 +64,7 @@ h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:.01em;margin:
 .stripe{height:5px;background:repeating-linear-gradient(-45deg,var(--hi) 0 10px,var(--ink) 10px 20px);opacity:.9}
 .tabs{display:flex;gap:4px;background:var(--surface-2);padding:4px;border-radius:10px}
 .tab{border:0;background:transparent;padding:7px 14px;border-radius:7px;font-weight:600;font-size:14px;cursor:pointer;color:var(--muted)}
+.tab .sm{display:none}
 .tab[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
 .tab:focus-visible,.btn:focus-visible,.icon-btn:focus-visible,.chip-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
@@ -113,11 +114,11 @@ main{max-width:1080px;margin:0 auto;padding-inline:16px;padding-block:20px 110px
 .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:13px;color:var(--muted)}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
 
-.srcs{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:12px}
+.srcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px;margin-top:12px}
 .src{display:flex;flex-direction:column;gap:5px;min-width:0}
 .src .v{font-family:var(--display);font-size:24px;font-weight:700;line-height:1.1}
 .src .s{font-size:12.5px;color:var(--muted)}
-@media (max-width:640px){.srcs{grid-template-columns:1fr;gap:14px}}
+@media (max-width:640px){.srcs{grid-template-columns:1fr 1fr;gap:14px}.src .v{font-size:20px}}
 .scan{font-size:13px;border-radius:9px;padding:9px 11px;background:var(--accent-soft);color:var(--accent);font-weight:500}
 .scan.ok{background:var(--ok-soft);color:var(--ok)}
 .scan.warn{background:var(--warn-soft);color:var(--warn)}
@@ -233,12 +234,24 @@ input[type=range]{accent-color:var(--ok);padding:0!important;background:transpar
 @media (max-width:640px){
   .top-in{padding-bottom:12px}
   .tabs{position:fixed;left:0;right:0;bottom:0;border-radius:0;padding:6px 10px calc(6px + env(safe-area-inset-bottom,0px));background:var(--surface);border-top:1px solid var(--line);z-index:30;justify-content:space-around}
-  .tab{flex:1;padding:10px 6px}
+  .tab{flex:1;padding:10px 4px;font-size:13px}
+  .tab .lg{display:none}.tab .sm{display:inline}
   .scrim{align-items:flex-end;padding:0}
   .sheet{border-radius:16px 16px 0 0;max-height:92%;padding-bottom:env(safe-area-inset-bottom,0px)}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 .menu-btn{margin-left:-6px}
+.payers{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.payer{all:unset;box-sizing:border-box;cursor:pointer;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.payer b{font-family:var(--display);font-size:24px;font-weight:700}
+.payer .s{font-size:12px;color:var(--muted)}
+.payer.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.payer:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-width:640px){.payers{grid-template-columns:1fr 1fr}.payer b{font-size:20px}}
+.filters{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.fchip{background:var(--surface-2);color:var(--muted);padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600;white-space:nowrap}
+.fchip.on{background:var(--accent);color:var(--accent-ink)}
+.month{display:flex;flex-direction:column;gap:6px}
 .menu-btn svg{width:22px;height:22px}
 body.logged-out .tabs,body.logged-out .menu-btn{display:none}
 .login{max-width:380px;margin:8vh auto 0;display:flex;flex-direction:column;gap:10px;align-items:stretch}
@@ -255,8 +268,9 @@ body.logged-out .tabs,body.logged-out .menu-btn{display:none}
   <div class="top-in">
     <div class="brand"><span class="mark" role="img" aria-label="Logo Maison Bouchon"></span><div class="brand-t"><h1>Maison Bouchon</h1><small>Suivi de chantier</small></div></div>
     <nav class="tabs" role="tablist" aria-label="Sections">
-      <button class="tab" role="tab" id="tab-accueil" data-tab="accueil">Tableau de bord</button>
+      <button class="tab" role="tab" id="tab-accueil" data-tab="accueil"><span class="lg">Tableau de bord</span><span class="sm">Accueil</span></button>
       <button class="tab" role="tab" id="tab-budget" data-tab="budget">Budget</button>
+      <button class="tab" role="tab" id="tab-depenses" data-tab="depenses">Dépenses</button>
       <button class="tab" role="tab" id="tab-travaux" data-tab="travaux">Travaux</button>
     </nav>
     <button class="icon-btn menu-btn" data-action="menu" aria-label="Compte et options"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg></button>
@@ -293,10 +307,16 @@ const ETAPE_STATUT = {
 };
 const COLLS = ["themes","devis","depenses","etapes"];
 const SOURCES = {
-  emprunt:{label:"Montant emprunté",short:"Prêt"},
-  apportPret:{label:"Apport du prêt",short:"Apport du prêt"},
-  apportSup:{label:"Apport supplémentaire",short:"Apport supp."}
+  emprunt:{label:"Prêt",short:"Prêt"},
+  apportPret:{label:"Apport prêt par Fanette",short:"Apport prêt Fanette"},
+  apportSupF:{label:"Apport supplémentaire Fanette",short:"Apport supp. Fanette"},
+  apportSupY:{label:"Apport supplémentaire Yohan",short:"Apport supp. Yohan"},
+  apportSup:{label:"Apport supplémentaire (à répartir)",short:"Apport supp. à répartir",legacy:true}
 };
+// L'ancienne enveloppe « apport supplémentaire » n'apparaît que tant qu'elle sert encore.
+const legacyUsed = k => (Number(state.settings[k])||0)>0 || state.depenses.some(x=>x.source===k);
+const srcList = keep => Object.entries(SOURCES).filter(([k,v])=>!v.legacy || k===keep || legacyUsed(k));
+const srcOptions = sel => `<option value="">Non précisé</option>`+srcList(sel).map(([k,o])=>`<option value="${k}" ${k===sel?"selected":""}>${o.label}</option>`).join("");
 const budgetOf = st => { const t = Object.keys(SOURCES).reduce((a,k)=>a+(Number(st[k])||0),0); return t || Number(st.budget)||0; };
 
 const state = {themes:[],devis:[],depenses:[],etapes:[],settings:{budget:0}, ready:false};
@@ -376,7 +396,7 @@ function render(){
   let html = "";
   if(offline) html += `<div class="banner">Hors ligne : les données affichées peuvent ne pas être à jour.</div>`;
   if(!state.ready) html += `<div class="empty">Chargement…</div>`;
-  else html += tab==="budget"?viewBudget():tab==="travaux"?viewTravaux():viewAccueil();
+  else html += tab==="budget"?viewBudget():tab==="depenses"?viewDepenses():tab==="travaux"?viewTravaux():viewAccueil();
   app.innerHTML = html;
 }
 const canEdit = () => !readOnly;
@@ -431,7 +451,7 @@ function financementHTML(t){
   const st = state.settings;
   const paidBy = k => sum(state.depenses.filter(x=>x.source===k));
   const unassigned = sum(state.depenses.filter(x=>!SOURCES[x.source]));
-  const cells = Object.entries(SOURCES).map(([k,v])=>{
+  const cells = srcList().map(([k,v])=>{
     const m = Number(st[k])||0, p = paidBy(k), r = m-p;
     return `<div class="src"><span class="eyebrow">${v.label}</span><span class="v num">${m?fmt0(m):"–"}</span>
       <div class="bar ${r<0?"over":""}"><span class="dep" style="width:${m?Math.min(p/m,1)*100:0}%"></span></div>
@@ -513,6 +533,43 @@ function depLine(x){
   </div>`;
 }
 
+let payeur = "tous";
+function viewDepenses(){
+  const all = state.depenses.slice().sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))||String(b.maj||"").localeCompare(String(a.maj||"")));
+  const total = sum(all);
+  const groups = srcList().map(([k,v])=>({k,label:v.label,list:all.filter(x=>x.source===k)}));
+  const none = all.filter(x=>!SOURCES[x.source]);
+  if(none.length) groups.push({k:"aucun",label:"Non précisé",list:none});
+  const cards = groups.map(g=>{
+    const p = sum(g.list), env = Number(state.settings[g.k])||0;
+    return `<button class="payer ${payeur===g.k?"on":""}" data-action="payeur" data-k="${g.k}">
+      <span class="eyebrow">${esc(g.label)}</span><b class="num">${fmt0(p)}</b>
+      <span class="s num">${g.list.length} dépense${g.list.length>1?"s":""}${env?` · reste ${fmt0(env-p)} sur ${fmt0(env)}`:""}${total?` · ${Math.round(p/total*100)} %`:""}</span></button>`;
+  }).join("");
+  const shown = payeur==="tous"?all:payeur==="aucun"?none:all.filter(x=>x.source===payeur);
+  const byMonth = {};
+  shown.forEach(x=>{ const m=(x.date||"").slice(0,7)||"sans-date"; (byMonth[m]=byMonth[m]||[]).push(x); });
+  const monthName = m => m==="sans-date"?"Sans date":new Date(m+"-15T12:00:00").toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
+  return `
+  <div class="sec-head">
+    <div><h2>Dépenses</h2><p class="num">${all.length} dépense${all.length>1?"s":""} · ${fmt0(total)} payés au total</p></div>
+    ${btn("new-depense",ICON.plus+"Dépense","primary")}
+  </div>
+  <section class="payers">${cards}</section>
+  <div class="filters"><button class="chip-btn fchip ${payeur==="tous"?"on":""}" data-action="payeur" data-k="tous">Tout voir</button>${groups.map(g=>`<button class="chip-btn fchip ${payeur===g.k?"on":""}" data-action="payeur" data-k="${g.k}">${esc(SOURCES[g.k]?SOURCES[g.k].short:g.label)}</button>`).join("")}</div>
+  ${shown.length?Object.keys(byMonth).map(m=>`<div class="month"><div class="sub-h"><span class="eyebrow">${monthName(m)}</span><span class="eyebrow num"><b>${fmt0(sum(byMonth[m]))}</b></span></div>
+    <div class="lines">${byMonth[m].map(depRow).join("")}</div></div>`).join(""):`<div class="empty">Aucune dépense pour ce payeur.</div>`}`;
+}
+function depRow(x){
+  const dv = x.devisId && state.devis.find(d=>d.id===x.devisId);
+  return `<div class="line">
+    <div><div class="t">${esc(x.libelle||"Dépense")}</div>
+    <div class="d">${x.date?`<span>${fdate(x.date)}</span>`:""}<span>${esc(themeName(x.themeId))}</span>${dv?`<span class="chip c-acc">Devis ${esc(dv.entreprise||"")}</span>`:""}${fileLink(x)}</div>
+    <div class="d" style="margin-top:4px">${canEdit()?`<span class="chip-sel ${SOURCES[x.source]?"c-acc":"c-warn"}"><select data-change="dep-source" data-id="${x.id}" aria-label="Payé par">${srcOptions(x.source||"")}</select></span>`:`<span class="chip c-mute">${esc(SOURCES[x.source]?SOURCES[x.source].short:"Non précisé")}</span>`}</div></div>
+    <div class="m">${fmt2(x.montant)}</div>
+    ${canEdit()?`<button class="icon-btn" data-action="edit-depense" data-id="${x.id}" aria-label="Modifier la dépense">${ICON.edit}</button>`:"<span></span>"}
+  </div>`;
+}
 function viewTravaux(){
   const list = state.etapes.slice().sort(byOrder); const av = avancement();
   return `
@@ -715,7 +772,7 @@ function formDepense(id,themeId){
      <div class="row2"><div class="field"><label for="f-mt">Montant payé TTC (€)</label><input id="f-mt" name="montant" inputmode="decimal" value="${x&&x.montant!=null?String(x.montant).replace(".",","):""}" placeholder="3 735,00"></div>
      <div class="field"><label for="f-date">Date</label><input type="date" id="f-date" name="date" value="${esc(x?x.date||"":today())}"></div></div>
      <div class="row2"><div class="field"><label for="f-devis">Lié au devis</label><select id="f-devis" name="devisId">${devisOpts(tId)}</select></div>
-     <div class="field"><label for="f-src">Payé avec</label><select id="f-src" name="source"><option value="">Non précisé</option>${Object.entries(SOURCES).map(([k,o])=>`<option value="${k}" ${x&&x.source===k?"selected":""}>${o.label}</option>`).join("")}</select></div></div>
+     <div class="field"><label for="f-src">Payé avec</label><select id="f-src" name="source">${srcOptions(x?x.source:"")}</select></div></div>
      <div class="field"><label for="f-notes">Notes</label><textarea id="f-notes" name="notes">${esc(x?x.notes:"")}</textarea></div>`,
     async f=>{ const montant=parseAmount(val(f,"montant")); if(montant==null) return fail(f,"Indiquez un montant, par exemple 3 735.");
       const themeId=val(f,"themeId"); if(!themeId) return fail(f,"Créez d'abord un thème dans l'onglet Budget.");
@@ -751,10 +808,10 @@ function formBudget(){
   const st = state.settings;
   const v = k => { const n=Number(st[k])||0; return n?String(n).replace(".",","):""; };
   openModal("Financement",
-    Object.entries(SOURCES).map(([k,o])=>`<div class="field"><label for="f-${k}">${o.label} (€)</label><input id="f-${k}" name="${k}" inputmode="decimal" value="${v(k)}" placeholder="0"></div>`).join("")+
-    `<div class="hint">Le budget total est la somme des trois. Pour chaque dépense, indiquez avec quel argent elle a été payée pour suivre ce qu'il reste sur chaque enveloppe.</div>`,
+    srcList().map(([k,o])=>`<div class="field"><label for="f-${k}">${o.label} (€)</label><input id="f-${k}" name="${k}" inputmode="decimal" value="${v(k)}" placeholder="0"></div>`).join("")+
+    `<div class="hint">Le budget total est la somme de ces montants. Pour chaque dépense, indiquez avec quel argent elle a été payée pour suivre ce qu'il reste sur chaque enveloppe.</div>`,
     async f=>{ const o=Object.assign({},st); delete o.maj;
-      for(const k of Object.keys(SOURCES)){ const raw=val(f,k); const n=raw===""?0:parseAmount(raw); if(n==null) return fail(f,"Montant illisible pour « "+SOURCES[k].label+" »."); o[k]=n; }
+      for(const [k] of srcList()){ const raw=val(f,k); const n=raw===""?0:parseAmount(raw); if(n==null) return fail(f,"Montant illisible pour « "+SOURCES[k].label+" »."); o[k]=n; }
       delete o.budget; await saveSettings(o); });
 }
 function formPaiement(d,partiel){
@@ -765,7 +822,7 @@ function formPaiement(d,partiel){
      <div class="field"><label for="f-lib">Libellé</label><input id="f-lib" name="libelle" value="${esc((partiel?"Acompte ":paidOn(d)?"Solde ":"Paiement ")+who+(d.libelle?" · "+d.libelle:""))}"></div>
      <div class="row2"><div class="field"><label for="f-mt">Montant payé TTC (€)</label><input id="f-mt" name="montant" inputmode="decimal" value="${partiel?"":String(Math.round(reste*100)/100).replace(".",",")}" placeholder="${partiel?"Ex. "+fmt0(reste*0.3).replace(/\s?€/,""):""}"></div>
      <div class="field"><label for="f-date">Date</label><input type="date" id="f-date" name="date" value="${today()}"></div></div>
-     <div class="field"><label for="f-src">Payé avec</label><select id="f-src" name="source"><option value="">Non précisé</option>${Object.entries(SOURCES).map(([k,o])=>`<option value="${k}">${o.label}</option>`).join("")}</select></div>`,
+     <div class="field"><label for="f-src">Payé avec</label><select id="f-src" name="source">${srcOptions("")}</select></div>`,
     async f=>{ const montant=parseAmount(val(f,"montant")); if(montant==null||montant<=0) return fail(f,"Indiquez le montant payé.");
       if(d.statut!=="accepte"){ const o=Object.assign({},d); delete o.id; o.statut="accepte"; await save("devis",d.id,o); }
       await save("depenses",uid(),{themeId:d.themeId,devisId:d.id,libelle:val(f,"libelle"),montant,date:val(f,"date"),source:val(f,"source"),notes:""});
@@ -815,9 +872,15 @@ document.addEventListener("click",ev=>{
     case "move": moveEtape(id,Number(a.dataset.dir)); break;
     case "edit-budget": if(canEdit()) formBudget(); break;
     case "menu": formMenu(); break;
+    case "payeur": payeur = (payeur===a.dataset.k && a.classList.contains("payer"))?"tous":a.dataset.k; render(); break;
   }
 });
 document.addEventListener("change",async ev=>{
+  const ds = ev.target.closest("[data-change=dep-source]");
+  if(ds){ const x=state.depenses.find(y=>y.id===ds.dataset.id); if(!x) return;
+    const o=Object.assign({},x); delete o.id; o.source=ds.value; ds.disabled=true;
+    try{ await save("depenses",x.id,o); toast("Payé par : "+(SOURCES[ds.value]?SOURCES[ds.value].label:"non précisé")); }catch(e){ render(); }
+    return; }
   const el = ev.target.closest("[data-change=devis-statut]"); if(!el) return;
   const d = state.devis.find(x=>x.id===el.dataset.id); if(!d) return;
   if(el.value==="paye"||el.value==="partiel"){ formPaiement(d,el.value==="partiel"); return; }
@@ -831,12 +894,12 @@ document.addEventListener("keydown",ev=>{
   if(ev.key==="Escape" && current) closeModal();
   if((ev.key==="Enter"||ev.key===" ") && ev.target.matches("[role=button][data-action]")){ ev.preventDefault(); ev.target.click(); }
 });
-function setTab(t){ tab = ["accueil","budget","travaux"].includes(t)?t:"accueil"; ls("mb-tab",tab); render(); window.scrollTo(0,0); }
+function setTab(t){ tab = ["accueil","budget","depenses","travaux"].includes(t)?t:"accueil"; ls("mb-tab",tab); render(); window.scrollTo(0,0); }
 
 /* ---------- boot ---------- */
 try{ JSON.parse(ls("mb-open")||"[]").forEach(x=>open.add(x)); }catch(e){}
 tab = (location.hash||"").slice(1) || ls("mb-tab") || "accueil";
-if(!["accueil","budget","travaux"].includes(tab)) tab="accueil";
+if(!["accueil","budget","depenses","travaux"].includes(tab)) tab="accueil";
 render();
 
 /* ---------- compte, import, connexion ---------- */
