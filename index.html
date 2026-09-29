@@ -311,12 +311,17 @@ const SOURCES = {
   apportPret:{label:"Apport prêt par Fanette",short:"Apport prêt Fanette"},
   apportSupF:{label:"Apport supplémentaire Fanette",short:"Apport supp. Fanette"},
   apportSupY:{label:"Apport supplémentaire Yohan",short:"Apport supp. Yohan"},
+  apportSup50:{label:"Apport supplémentaire 50/50",short:"Apport supp. 50/50",split:{apportSupF:.5,apportSupY:.5}},
   apportSup:{label:"Apport supplémentaire (à répartir)",short:"Apport supp. à répartir",legacy:true}
 };
 // L'ancienne enveloppe « apport supplémentaire » n'apparaît que tant qu'elle sert encore.
 const legacyUsed = k => (Number(state.settings[k])||0)>0 || state.depenses.some(x=>x.source===k);
 const srcList = keep => Object.entries(SOURCES).filter(([k,v])=>!v.legacy || k===keep || legacyUsed(k));
 const srcOptions = sel => `<option value="">Non précisé</option>`+srcList(sel).map(([k,o])=>`<option value="${k}" ${k===sel?"selected":""}>${o.label}</option>`).join("");
+// Une source « split » n'a pas d'enveloppe : son montant est réparti sur celles de Fanette et Yohan.
+const envList = () => srcList().filter(([k,v])=>!v.split);
+const shareOf = (x,k) => { const n=Number(x.montant)||0; if(x.source===k) return n; const sp=SOURCES[x.source]&&SOURCES[x.source].split; return sp&&sp[k]?n*sp[k]:0; };
+const paidFor = (list,k) => list.reduce((a,x)=>a+shareOf(x,k),0);
 const budgetOf = st => { const t = Object.keys(SOURCES).reduce((a,k)=>a+(Number(st[k])||0),0); return t || Number(st.budget)||0; };
 
 const state = {themes:[],devis:[],depenses:[],etapes:[],settings:{budget:0}, ready:false};
@@ -449,9 +454,9 @@ function viewAccueil(){
 }
 function financementHTML(t){
   const st = state.settings;
-  const paidBy = k => sum(state.depenses.filter(x=>x.source===k));
+  const paidBy = k => paidFor(state.depenses,k);
   const unassigned = sum(state.depenses.filter(x=>!SOURCES[x.source]));
-  const cells = srcList().map(([k,v])=>{
+  const cells = envList().map(([k,v])=>{
     const m = Number(st[k])||0, p = paidBy(k), r = m-p;
     return `<div class="src"><span class="eyebrow">${v.label}</span><span class="v num">${m?fmt0(m):"–"}</span>
       <div class="bar ${r<0?"over":""}"><span class="dep" style="width:${m?Math.min(p/m,1)*100:0}%"></span></div>
@@ -537,16 +542,18 @@ let payeur = "tous";
 function viewDepenses(){
   const all = state.depenses.slice().sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))||String(b.maj||"").localeCompare(String(a.maj||"")));
   const total = sum(all);
-  const groups = srcList().map(([k,v])=>({k,label:v.label,list:all.filter(x=>x.source===k)}));
+  const groups = srcList().map(([k,v])=>({k,label:v.label,split:!!v.split,list:all.filter(x=>shareOf(x,k)>0||x.source===k)}));
   const none = all.filter(x=>!SOURCES[x.source]);
   if(none.length) groups.push({k:"aucun",label:"Non précisé",list:none});
   const cards = groups.map(g=>{
-    const p = sum(g.list), env = Number(state.settings[g.k])||0;
+    const p = g.k==="aucun"||g.split?sum(g.list):paidFor(g.list,g.k), env = g.split?0:Number(state.settings[g.k])||0;
+    const detail = g.split?(p?` · ${fmt0(p/2)} chacun, compté pour Fanette et Yohan`:" · compté moitié Fanette, moitié Yohan"):`${env?` · reste ${fmt0(env-p)} sur ${fmt0(env)}`:""}${total?` · ${Math.round(p/total*100)} %`:""}`;
     return `<button class="payer ${payeur===g.k?"on":""}" data-action="payeur" data-k="${g.k}">
       <span class="eyebrow">${esc(g.label)}</span><b class="num">${fmt0(p)}</b>
-      <span class="s num">${g.list.length} dépense${g.list.length>1?"s":""}${env?` · reste ${fmt0(env-p)} sur ${fmt0(env)}`:""}${total?` · ${Math.round(p/total*100)} %`:""}</span></button>`;
+      <span class="s num">${g.list.length} dépense${g.list.length>1?"s":""}${detail}</span></button>`;
   }).join("");
-  const shown = payeur==="tous"?all:payeur==="aucun"?none:all.filter(x=>x.source===payeur);
+  const g0 = groups.find(g=>g.k===payeur);
+  const shown = payeur==="tous"||!g0?all:g0.list;
   const byMonth = {};
   shown.forEach(x=>{ const m=(x.date||"").slice(0,7)||"sans-date"; (byMonth[m]=byMonth[m]||[]).push(x); });
   const monthName = m => m==="sans-date"?"Sans date":new Date(m+"-15T12:00:00").toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
@@ -808,10 +815,10 @@ function formBudget(){
   const st = state.settings;
   const v = k => { const n=Number(st[k])||0; return n?String(n).replace(".",","):""; };
   openModal("Financement",
-    srcList().map(([k,o])=>`<div class="field"><label for="f-${k}">${o.label} (€)</label><input id="f-${k}" name="${k}" inputmode="decimal" value="${v(k)}" placeholder="0"></div>`).join("")+
+    envList().map(([k,o])=>`<div class="field"><label for="f-${k}">${o.label} (€)</label><input id="f-${k}" name="${k}" inputmode="decimal" value="${v(k)}" placeholder="0"></div>`).join("")+
     `<div class="hint">Le budget total est la somme de ces montants. Pour chaque dépense, indiquez avec quel argent elle a été payée pour suivre ce qu'il reste sur chaque enveloppe.</div>`,
     async f=>{ const o=Object.assign({},st); delete o.maj;
-      for(const [k] of srcList()){ const raw=val(f,k); const n=raw===""?0:parseAmount(raw); if(n==null) return fail(f,"Montant illisible pour « "+SOURCES[k].label+" »."); o[k]=n; }
+      for(const [k] of envList()){ const raw=val(f,k); const n=raw===""?0:parseAmount(raw); if(n==null) return fail(f,"Montant illisible pour « "+SOURCES[k].label+" »."); o[k]=n; }
       delete o.budget; await saveSettings(o); });
 }
 function formPaiement(d,partiel){
