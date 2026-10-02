@@ -218,6 +218,10 @@ form.f{display:flex;flex-direction:column;gap:12px;padding:8px 18px 18px}
 .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
 .field textarea{min-height:70px;resize:vertical}
 .field .hint{font-size:12px;color:var(--muted)}
+.rep{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:12px;margin-bottom:12px}
+.rep[hidden]{display:none}
+.rep-l{display:grid;grid-template-columns:1fr 120px;gap:10px;align-items:center;font-size:14px}
+.rep .hint{font-size:12px;color:var(--muted)}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media (max-width:420px){.row2{grid-template-columns:1fr}}
 .seg{display:flex;gap:4px;background:var(--surface-2);padding:4px;border-radius:9px;flex-wrap:wrap}
@@ -312,6 +316,7 @@ const SOURCES = {
   apportSupF:{label:"Apport supplémentaire Fanette",short:"Apport supp. Fanette"},
   apportSupY:{label:"Apport supplémentaire Yohan",short:"Apport supp. Yohan"},
   apportSup50:{label:"Apport supplémentaire 50/50",short:"Apport supp. 50/50",split:{apportSupF:.5,apportSupY:.5}},
+  multi:{label:"Répartir entre plusieurs payeurs",short:"Réparti",multi:true},
   apportSup:{label:"Apport supplémentaire (à répartir)",short:"Apport supp. à répartir",legacy:true}
 };
 // L'ancienne enveloppe « apport supplémentaire » n'apparaît que tant qu'elle sert encore.
@@ -319,8 +324,31 @@ const legacyUsed = k => (Number(state.settings[k])||0)>0 || state.depenses.some(
 const srcList = keep => Object.entries(SOURCES).filter(([k,v])=>!v.legacy || k===keep || legacyUsed(k));
 const srcOptions = sel => `<option value="">Non précisé</option>`+srcList(sel).map(([k,o])=>`<option value="${k}" ${k===sel?"selected":""}>${o.label}</option>`).join("");
 // Une source « split » n'a pas d'enveloppe : son montant est réparti sur celles de Fanette et Yohan.
-const envList = () => srcList().filter(([k,v])=>!v.split);
-const shareOf = (x,k) => { const n=Number(x.montant)||0; if(x.source===k) return n; const sp=SOURCES[x.source]&&SOURCES[x.source].split; return sp&&sp[k]?n*sp[k]:0; };
+// « multi » : montants libres par enveloppe, stockés dans x.repartition {cle: montant}.
+const envList = () => srcList().filter(([k,v])=>!v.split&&!v.multi);
+const shareOf = (x,k) => { const n=Number(x.montant)||0; if(x.source===k) return n;
+  if(x.source==="multi") return Number((x.repartition||{})[k])||0; const sp=SOURCES[x.source]&&SOURCES[x.source].split; return sp&&sp[k]?n*sp[k]:0; };
+const repList = () => envList().filter(([k,v])=>!v.legacy);
+const repText = x => Object.entries(x.repartition||{}).filter(([k,n])=>n>0&&SOURCES[k]).map(([k,n])=>`${SOURCES[k].short} ${fmt0(n)}`).join(" · ");
+const srcChip = x => x.source==="multi"?`<span class="chip c-mute">Réparti : ${esc(repText(x))}</span>`:SOURCES[x.source]?`<span class="chip c-mute">${SOURCES[x.source].short}</span>`:"";
+const repartHTML = x => { const on = x&&x.source==="multi", rp=(x&&x.repartition)||{};
+  return `<div id="f-rep" class="rep" ${on?"":"hidden"}><span class="eyebrow">Répartition du montant</span>
+    ${repList().map(([k,o])=>`<div class="rep-l"><label for="f-rep-${k}">${o.label}</label><input id="f-rep-${k}" name="rep-${k}" data-rep inputmode="decimal" placeholder="0" value="${rp[k]?String(rp[k]).replace(".",","):""}"></div>`).join("")}
+    <div class="hint num" id="f-rep-s"></div></div>`; };
+function wireRepart(f){
+  const src=f.elements.source, box=f.querySelector("#f-rep"), out=f.querySelector("#f-rep-s"); if(!src||!box) return;
+  const upd=()=>{ box.hidden = src.value!=="multi"; if(box.hidden) return; f.querySelector("#m-err").hidden=true;
+    const mt=parseAmount(val(f,"montant"))||0, t=[...box.querySelectorAll("[data-rep]")].reduce((a,i)=>a+(parseAmount(i.value)||0),0), d=Math.round((mt-t)*100)/100;
+    out.innerHTML = `Réparti ${fmt2(t)} sur ${fmt2(mt)} · ${d===0?"<b style=\"color:var(--ok)\">tout est réparti</b>":d>0?`reste ${fmt2(d)} à répartir`:`<b style="color:var(--bad)">${fmt2(-d)} de trop</b>`}`; };
+  f.addEventListener("input",upd); src.addEventListener("change",upd); upd();
+}
+function readRepart(f,obj){
+  if(obj.source!=="multi"){ delete obj.repartition; return true; }
+  const rp={}; let t=0;
+  for(const [k] of repList()){ const raw=val(f,"rep-"+k); if(raw==="") continue; const n=parseAmount(raw); if(n==null||n<0) return fail(f,"Montant illisible pour « "+SOURCES[k].label+" »."); if(n>0){ rp[k]=n; t+=n; } }
+  if(Math.abs(t-obj.montant)>0.005) return fail(f,`La répartition (${fmt2(t)}) doit être égale au montant payé (${fmt2(obj.montant)}).`);
+  obj.repartition=rp; return true;
+}
 const paidFor = (list,k) => list.reduce((a,x)=>a+shareOf(x,k),0);
 const budgetOf = st => { const t = Object.keys(SOURCES).reduce((a,k)=>a+(Number(st[k])||0),0); return t || Number(st.budget)||0; };
 
@@ -532,7 +560,7 @@ function depLine(x){
   const dv = x.devisId && state.devis.find(d=>d.id===x.devisId);
   return `<div class="line">
     <div><div class="t">${esc(x.libelle||"Dépense")}</div>
-    <div class="d">${x.date?`<span>${fdate(x.date)}</span>`:""}${dv?`<span class="chip c-acc">Devis ${esc(dv.entreprise||"")}</span>`:""}${SOURCES[x.source]?`<span class="chip c-mute">${SOURCES[x.source].short}</span>`:x.payePar?`<span>payé par ${esc(x.payePar)}</span>`:""}${fileLink(x)}${x.notes?`<span>${esc(x.notes)}</span>`:""}</div></div>
+    <div class="d">${x.date?`<span>${fdate(x.date)}</span>`:""}${dv?`<span class="chip c-acc">Devis ${esc(dv.entreprise||"")}</span>`:""}${srcChip(x)?srcChip(x):x.payePar?`<span>payé par ${esc(x.payePar)}</span>`:""}${fileLink(x)}${x.notes?`<span>${esc(x.notes)}</span>`:""}</div></div>
     <div class="m">${fmt2(x.montant)}</div>
     ${canEdit()?`<button class="icon-btn" data-action="edit-depense" data-id="${x.id}" aria-label="Modifier la dépense">${ICON.edit}</button>`:"<span></span>"}
   </div>`;
@@ -542,10 +570,13 @@ let payeur = "tous";
 function viewDepenses(){
   const all = state.depenses.slice().sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))||String(b.maj||"").localeCompare(String(a.maj||"")));
   const total = sum(all);
-  const groups = srcList().map(([k,v])=>({k,label:v.label,split:!!v.split,list:all.filter(x=>shareOf(x,k)>0||x.source===k)}));
+  const groups = srcList().map(([k,v])=>({k,label:v.label,split:!!v.split,multi:!!v.multi,list:all.filter(x=>shareOf(x,k)>0||x.source===k)}));
   const none = all.filter(x=>!SOURCES[x.source]);
   if(none.length) groups.push({k:"aucun",label:"Non précisé",list:none});
   const cards = groups.map(g=>{
+    if(g.multi){ const p=sum(g.list); return `<button class="payer ${payeur===g.k?"on":""}" data-action="payeur" data-k="${g.k}">
+      <span class="eyebrow">Réparti entre plusieurs</span><b class="num">${fmt0(p)}</b>
+      <span class="s num">${g.list.length} dépense${g.list.length>1?"s":""} · comptées dans chaque enveloppe selon la répartition</span></button>`; }
     const p = g.k==="aucun"||g.split?sum(g.list):paidFor(g.list,g.k), env = g.split?0:Number(state.settings[g.k])||0;
     const detail = g.split?(p?` · ${fmt0(p/2)} chacun, compté pour Fanette et Yohan`:" · compté moitié Fanette, moitié Yohan"):`${env?` · reste ${fmt0(env-p)} sur ${fmt0(env)}`:""}${total?` · ${Math.round(p/total*100)} %`:""}`;
     return `<button class="payer ${payeur===g.k?"on":""}" data-action="payeur" data-k="${g.k}">
@@ -572,7 +603,7 @@ function depRow(x){
   return `<div class="line">
     <div><div class="t">${esc(x.libelle||"Dépense")}</div>
     <div class="d">${x.date?`<span>${fdate(x.date)}</span>`:""}<span>${esc(themeName(x.themeId))}</span>${dv?`<span class="chip c-acc">Devis ${esc(dv.entreprise||"")}</span>`:""}${fileLink(x)}</div>
-    <div class="d" style="margin-top:4px">${canEdit()?`<span class="chip-sel ${SOURCES[x.source]?"c-acc":"c-warn"}"><select data-change="dep-source" data-id="${x.id}" aria-label="Payé par">${srcOptions(x.source||"")}</select></span>`:`<span class="chip c-mute">${esc(SOURCES[x.source]?SOURCES[x.source].short:"Non précisé")}</span>`}</div></div>
+    <div class="d" style="margin-top:4px">${canEdit()?`<span class="chip-sel ${SOURCES[x.source]?"c-acc":"c-warn"}"><select data-change="dep-source" data-id="${x.id}" aria-label="Payé par">${srcOptions(x.source||"")}</select></span>`:`<span class="chip c-mute">${esc(SOURCES[x.source]?SOURCES[x.source].short:"Non précisé")}</span>`}${x.source==="multi"?`<span class="s num">${esc(repText(x))}</span>`:""}</div></div>
     <div class="m">${fmt2(x.montant)}</div>
     ${canEdit()?`<button class="icon-btn" data-action="edit-depense" data-id="${x.id}" aria-label="Modifier la dépense">${ICON.edit}</button>`:"<span></span>"}
   </div>`;
@@ -768,7 +799,7 @@ function formDevis(id,themeId,pick){
   wireAutofill(form,"devis",!d);
   if(pick) form.elements.file.click();
 }
-function formDepense(id,themeId){
+function formDepense(id,themeId,srcPreset){
   const x = id && state.depenses.find(y=>y.id===id);
   const tId = x?x.themeId:(themeId||(state.themes.slice().sort(byOrder)[0]||{}).id);
   const devisOpts = tid => `<option value="">Aucun</option>`+state.devis.filter(d=>d.themeId===tid&&d.statut!=="refuse").map(d=>`<option value="${d.id}" ${x&&x.devisId===d.id?"selected":""}>${esc(d.entreprise||"Devis")} · ${fmt0(d.montant)}</option>`).join("");
@@ -779,16 +810,19 @@ function formDepense(id,themeId){
      <div class="row2"><div class="field"><label for="f-mt">Montant payé TTC (€)</label><input id="f-mt" name="montant" inputmode="decimal" value="${x&&x.montant!=null?String(x.montant).replace(".",","):""}" placeholder="3 735,00"></div>
      <div class="field"><label for="f-date">Date</label><input type="date" id="f-date" name="date" value="${esc(x?x.date||"":today())}"></div></div>
      <div class="row2"><div class="field"><label for="f-devis">Lié au devis</label><select id="f-devis" name="devisId">${devisOpts(tId)}</select></div>
-     <div class="field"><label for="f-src">Payé avec</label><select id="f-src" name="source">${srcOptions(x?x.source:"")}</select></div></div>
+     <div class="field"><label for="f-src">Payé avec</label><select id="f-src" name="source">${srcOptions(srcPreset||(x?x.source:""))}</select></div></div>
+     ${repartHTML(srcPreset?Object.assign({},x,{source:srcPreset}):x)}
      <div class="field"><label for="f-notes">Notes</label><textarea id="f-notes" name="notes">${esc(x?x.notes:"")}</textarea></div>`,
     async f=>{ const montant=parseAmount(val(f,"montant")); if(montant==null) return fail(f,"Indiquez un montant, par exemple 3 735.");
       const themeId=val(f,"themeId"); if(!themeId) return fail(f,"Créez d'abord un thème dans l'onglet Budget.");
       const obj={themeId,libelle:val(f,"libelle"),montant,date:val(f,"date"),devisId:val(f,"devisId"),source:val(f,"source"),notes:val(f,"notes")}; if(x&&x.payePar) obj.payePar=x.payePar;
+      if(!readRepart(f,obj)) return false;
       await handleFile(f,obj,x); await save("depenses",x?x.id:uid(),obj); open.add(themeId); },
     x?async()=>{ await remove("depenses",x.id); }:null);
   const sel = document.getElementById("f-theme");
   sel.addEventListener("change",()=>{ document.getElementById("f-devis").innerHTML=devisOpts(sel.value); });
   wireAutofill(document.getElementById("m-form"),"depense",!x);
+  wireRepart(document.getElementById("m-form"));
 }
 function formEtape(id){
   const e = id && state.etapes.find(y=>y.id===id);
@@ -829,12 +863,16 @@ function formPaiement(d,partiel){
      <div class="field"><label for="f-lib">Libellé</label><input id="f-lib" name="libelle" value="${esc((partiel?"Acompte ":paidOn(d)?"Solde ":"Paiement ")+who+(d.libelle?" · "+d.libelle:""))}"></div>
      <div class="row2"><div class="field"><label for="f-mt">Montant payé TTC (€)</label><input id="f-mt" name="montant" inputmode="decimal" value="${partiel?"":String(Math.round(reste*100)/100).replace(".",",")}" placeholder="${partiel?"Ex. "+fmt0(reste*0.3).replace(/\s?€/,""):""}"></div>
      <div class="field"><label for="f-date">Date</label><input type="date" id="f-date" name="date" value="${today()}"></div></div>
-     <div class="field"><label for="f-src">Payé avec</label><select id="f-src" name="source">${srcOptions("")}</select></div>`,
+     <div class="field"><label for="f-src">Payé avec</label><select id="f-src" name="source">${srcOptions("")}</select></div>
+     ${repartHTML(null)}`,
     async f=>{ const montant=parseAmount(val(f,"montant")); if(montant==null||montant<=0) return fail(f,"Indiquez le montant payé.");
+      const dep={themeId:d.themeId,devisId:d.id,libelle:val(f,"libelle"),montant,date:val(f,"date"),source:val(f,"source"),notes:""};
+      if(!readRepart(f,dep)) return false;
       if(d.statut!=="accepte"){ const o=Object.assign({},d); delete o.id; o.statut="accepte"; await save("devis",d.id,o); }
-      await save("depenses",uid(),{themeId:d.themeId,devisId:d.id,libelle:val(f,"libelle"),montant,date:val(f,"date"),source:val(f,"source"),notes:""});
+      await save("depenses",uid(),dep);
       open.add(d.themeId); });
   document.getElementById("m-ok").textContent="Ajouter aux dépenses";
+  wireRepart(document.getElementById("m-form"));
 }
 
 /* ---------- quick actions ---------- */
@@ -885,7 +923,8 @@ document.addEventListener("click",ev=>{
 document.addEventListener("change",async ev=>{
   const ds = ev.target.closest("[data-change=dep-source]");
   if(ds){ const x=state.depenses.find(y=>y.id===ds.dataset.id); if(!x) return;
-    const o=Object.assign({},x); delete o.id; o.source=ds.value; ds.disabled=true;
+    if(ds.value==="multi"){ formDepense(x.id,null,"multi"); render(); return; }
+    const o=Object.assign({},x); delete o.id; o.source=ds.value; delete o.repartition; ds.disabled=true;
     try{ await save("depenses",x.id,o); toast("Payé par : "+(SOURCES[ds.value]?SOURCES[ds.value].label:"non précisé")); }catch(e){ render(); }
     return; }
   const el = ev.target.closest("[data-change=devis-statut]"); if(!el) return;
