@@ -1,5 +1,5 @@
 // Garde l'application disponible hors ligne ; les données viennent toujours de Supabase.
-const CACHE = "maison-bouchon-v4";
+const CACHE = "maison-bouchon-v5";
 const SHELL = ["./", "index.html", "config.js", "vendor/supabase.js", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });

@@ -439,6 +439,8 @@ function viewAccueil(){
   const t = totals(); const budget = budgetOf(state.settings); const av = avancement();
   const scale = Math.max(budget,t.projection,1);
   const ecart = budget ? budget - t.projection : null;
+  // Payé au-delà des devis signés (dépenses sans devis, ou qui dépassent le devis) : compté dans le prévu.
+  const hors = Math.max(t.projection - t.engage, 0), etude = t.previsionnel - t.projection;
   const themes = state.themes.slice().sort(byOrder).map(th=>({th,s:themeStats(th.id)})).filter(x=>x.s.projection>0||x.s.attente>0);
   const enCours = state.etapes.filter(e=>e.statut==="encours").sort(byOrder);
   const aVenir = state.etapes.filter(e=>e.statut==="afaire").sort(byOrder).slice(0,3);
@@ -447,9 +449,9 @@ function viewAccueil(){
   <section class="kpis">
     <div class="kpi edit" data-action="edit-budget" role="button" tabindex="0"><span class="eyebrow">Budget total</span><span class="v">${budget?fmt0(budget):"À définir"}</span><span class="s">${budget?"Prêt + apports":canEdit()?"Toucher pour saisir le financement":"Enveloppe globale"}</span></div>
     <div class="kpi"><span class="eyebrow">Prévu (devis signés)</span><span class="v">${fmt0(t.engage)}</span><span class="s">${t.attente?fmt0(t.attente)+" encore à l'étude":"Aucun devis en attente"}</span></div>
-    <div class="kpi"><span class="eyebrow">Prévisionnel (tous devis)</span><span class="v">${fmt0(t.previsionnel)}</span><span class="s">Signés + ${fmt0(t.attente)} à l'étude</span></div>
+    <div class="kpi"><span class="eyebrow">Prévisionnel (tous devis)</span><span class="v">${fmt0(t.previsionnel)}</span><span class="s">Signés${hors?` + ${fmt0(hors)} payés hors devis`:""} + ${fmt0(etude)} à l'étude</span></div>
     <div class="kpi"><span class="eyebrow">Déjà payé</span><span class="v">${fmt0(t.depense)}</span><span class="s">Reste à payer ${fmt0(t.reste)}</span></div>
-    <div class="kpi"><span class="eyebrow">Marge restante</span><span class="v" style="color:${ecart==null?"inherit":ecart<0?"var(--bad)":"var(--ok)"}">${ecart==null?"–":fmt0(ecart)}</span><span class="s">${ecart==null?"Définissez un budget":(ecart<0?"Dépassement sur devis signés":"Budget − devis signés")+(t.attente?` · ${fmt0(budget-t.previsionnel)} avec les devis à l'étude`:"")}</span></div>
+    <div class="kpi"><span class="eyebrow">Marge restante</span><span class="v" style="color:${ecart==null?"inherit":ecart<0?"var(--bad)":"var(--ok)"}">${ecart==null?"–":fmt0(ecart)}</span><span class="s">${ecart==null?"Définissez un budget":(ecart<0?"Dépassement sur devis signés":hors?"Budget − devis signés − payé hors devis":"Budget − devis signés")+(t.attente?` · ${fmt0(budget-t.previsionnel)} avec les devis à l'étude`:"")}</span></div>
   </section>
 
   <section class="panel">
@@ -457,7 +459,7 @@ function viewAccueil(){
     ${meterHTML("Prévisionnel tous devis sur le budget", budget?Math.round(t.previsionnel/budget*100)+" %":"Budget à définir",
       [{w:Math.min(t.projection,budget||Infinity),c:"var(--accent)"},{w:Math.max(0,Math.min(t.previsionnel,budget||Infinity)-t.projection),c:"var(--warn)"},{w:budget?Math.max(t.previsionnel-budget,0):0,c:"var(--bad)",hatch:1}],
       Math.max(budget,t.previsionnel,1),
-      `${fmt0(t.projection)} signés + ${fmt0(t.previsionnel-t.projection)} à l'étude = ${fmt0(t.previsionnel)}`+(budget?(t.previsionnel>budget?` · <b style="color:var(--bad)">dépasse le budget de ${fmt0(t.previsionnel-budget)}</b>`:` · marge ${fmt0(budget-t.previsionnel)} sur ${fmt0(budget)}`):""))}
+      `${fmt0(t.engage)} signés${hors?` + ${fmt0(hors)} payés hors devis`:""} + ${fmt0(etude)} à l'étude = ${fmt0(t.previsionnel)}`+(budget?(t.previsionnel>budget?` · <b style="color:var(--bad)">dépasse le budget de ${fmt0(t.previsionnel-budget)}</b>`:` · marge ${fmt0(budget-t.previsionnel)} sur ${fmt0(budget)}`):""))}
   </section>
 
   ${financementHTML(t)}
